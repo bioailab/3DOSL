@@ -21,7 +21,7 @@ def data_unpack(data_path, output_path):
     zipped_files = glob.glob(data_path + '/*.zip')
     for data_path in tqdm(zipped_files):
         file_name = os.path.basename(data_path).split('.')[0]
-        shutil.unpack_archive(data_path, os.path.join(output_path, file_name))
+        shutil.unpack_archive(data_path, os.path.join(output_path))
 
     # return output_path
 
