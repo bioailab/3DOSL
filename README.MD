@@ -20,8 +20,8 @@ Use the jupyter notbook 'data_read_vis.ipynb' to read and vizualize the differen
 
 
 ## Citing the paper
-```
 You can cite the paper as : 
+```
 @data{JX6JXF_2024,
 author = {Punnakkal, Abhinanda Ranjit and Jadhav, Suyog S and Celeste, Aaron Vaughn and Horsch, Alexander and Agarwal, Krishna and Prasad, Dilip K},
 publisher = {DataverseNO},
