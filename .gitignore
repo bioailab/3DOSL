@@ -1,4 +1,5 @@
 .3DOSL_env/
 data/
-data_zip/
-data_old
+data_zip/*
+data_old/
+data_test/
