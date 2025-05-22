@@ -1,0 +1,10 @@
+inherit_from: configs/img/onet_EMPIAR10791.yaml
+data:
+  dataset: images
+  path: /data_mnt/data/occupancy_networks/data/my_test/img
+training:
+  out_dir:  /data_mnt/data/occupancy_networks/data/my_test/img_out
+generation:
+  generation_dir: generation
+  refinement_step: 30
+  simplify_nfaces: 5000

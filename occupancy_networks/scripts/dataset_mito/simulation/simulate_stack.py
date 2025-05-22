@@ -1,0 +1,269 @@
+import sys
+from glob import glob
+from multiprocessing import Pool
+from functools import partial
+import os
+import ipdb
+import numpy as np
+import multiprocessing
+import cv2
+import tqdm
+import math as m
+import importlib.util
+import random
+# 
+import skimage
+import skimage.measure
+from PIL import Image
+import argparse
+from skimage.transform import downscale_local_mean
+from tifffile import imwrite
+
+
+def read_conf(conf_file, para ):
+    assert  os.path.exists(conf_file)
+    spec = importlib.util.spec_from_file_location(para, conf_file)
+    foo = importlib.util.module_from_spec(spec)
+    sys.modules[para] = foo
+    # ipdb.set_trace()
+    spec.loader.exec_module(foo)
+    return foo
+
+MAX_XY=2000     #nm
+MIN_XY=-2000
+MIN_Z=0
+MAX_Z=1400
+
+too_big_list = []
+
+def rotate(X, theta, axis='x'):
+  '''Rotate multidimensional array `X` `theta` degrees around axis `axis`
+  https://stackoverflow.com/questions/6802577/rotation-of-3d-vector'''
+  c, s = np.cos(theta), np.sin(theta)
+  if axis == 'x': return np.dot(X, np.array([
+    [1.,  0,  0],
+    [0 ,  c, -s],
+    [0 ,  s,  c]
+  ]))
+  elif axis == 'y': return np.dot(X, np.array([
+    [c,  0,  -s],
+    [0,  1,   0],
+    [s,  0,   c]
+  ]))
+  elif axis == 'z': return np.dot(X, np.array([
+    [c, -s,  0 ],
+    [s,  c,  0 ],
+    [0,  0,  1.],
+  ]))
+
+
+def process_matrix_all_z(locations, size_x, step_size_xy, psf_size_x, stage_delta, sampling, mp, args, wvl=0.510, ):
+    # ipdb.set_trace()
+    if args.microscope_type == 'confocal': 
+        from simulation import microscPSFmod_conf as msPSF
+    else:
+        from simulation import microscPSFmod_epi as msPSF
+    psf = msPSF.gLXYZParticleScan(
+        mp, step_size_xy, psf_size_x, locations[:,2],
+        zv=stage_delta, wvl=wvl, normalize=False,
+        px=locations[:, 0], py=locations[:, 1])
+    return np.reshape(psf, (psf.shape[0], -1))
+
+def save_physics_gt(particlesArray, number, pixel_size, image_size, max_xy, save_fname, args =None):
+    # ipdb.set_trace()
+    particlesArray=np.delete(particlesArray,2,1)
+    particlesArray*=1000
+    particlesArray=particlesArray
+    particlesArray = particlesArray+(2*max_xy)
+
+    pimage=np.zeros((pixel_size*image_size,pixel_size*image_size))
+    if pimage.shape[0] < particlesArray.shape[0] :
+        print('Here oo oo')
+        return 0
+        # ipdb.set_trace()
+    pimage[particlesArray[:,1].astype(int),particlesArray[:,0].astype(int)]=255
+    pimage2=skimage.measure.block_reduce(pimage, (pixel_size,pixel_size), np.max)
+    img = Image.fromarray(pimage2)
+    img=img.convert('RGB')
+    img.save(save_fname)
+    return 1
+
+def brightness_trace(t_off, t_on, rate, frames):
+
+    T = np.zeros((2, frames))
+    T[0, :] = np.random.exponential(scale=t_off, size=(1, frames))
+    T[1, :] = np.random.exponential(scale=t_on, size=(1, frames))
+
+    B = np.zeros((2, frames))
+    B[1, :] = rate * T[1, :]
+
+    T_t = T.ravel(order="F")
+    B_t = B.ravel(order="F")
+
+    T_cum = np.cumsum(T_t)
+    B_cum = np.cumsum(B_t)
+
+    start = np.random.randint(0, 10)
+
+    br = np.diff(np.interp(np.arange(start, start + frames + 1), T_cum, B_cum))
+    #br = 100
+    return br
+
+# def generate_mitochondria(batch, name, nlow, nhigh, save_path):
+def generate_mitochondria(in_file, args):
+    np.random.seed(0)
+    print(in_file)
+
+    # System parameters
+    # step_size_xy = 0.042 # [um] pixel size
+    mic_type = args.microscope_type
+    if mic_type == 'confocal':
+        from simulation import microscPSFmod_conf as msPSF
+    else:
+        from simulation import microscPSFmod_epi as msPSF
+    mp = read_conf(args.mic_conf, 'm_params').m_params
+    sim_p = read_conf(args.mic_conf, 'sim_params').sim_params
+    nlow=np.random.randint(sim_p.n_low_min, sim_p.n_low_max, 1)
+    nhigh=np.random.randint(sim_p.n_high_min, sim_p.n_high_max ,1)
+    max_xy = int(1000* 32* sim_p.step_size_xy)
+
+    # ipdb.set_trace()
+    # stage_delta = -1  # [um] negative means toward the objective
+    stage_delta = .1  # [um] negative means toward the objective
+    sampling = 1
+    psf_size_x = sampling * sim_p.size_x
+    # resolution = 24
+
+    # Fluorophore parameters
+    t_off = 0 # changed by K, needs to be checked, original value 8
+    t_on = 1 # changed by K, needs to be checked, original value 2
+    rate = 10
+    number = in_file.split('/')[-1].split('.')[0]  #.split('_')[1]#.
+    pc_data = np.load(in_file)
+    # scaling_term =  150 
+    scaling_term= 1
+    particles = pc_data.f.points    * scaling_term     # Scaling term
+    n_particles = len(particles)
+    print(number, 'number of emitters', n_particles)
+    # ipdb.set_trace()
+    center =  np.mean(particles, axis = 0) # - [(MIN_XY+MAX_XY)/2,(MIN_XY+MAX_XY)/2,(MIN_Z + MAX_Z)/2]
+    particlesArray_orig = (particles - center) * args.resolution * 0.001  # Converting to um
+
+    ipdb.set_trace()
+    brightness = np.zeros((n_particles, sim_p.size_t))
+    for i in range(n_particles):
+        brightness[i, :] = brightness_trace(t_off, t_on, rate, sim_p.size_t)
+    for angl in sim_p.angles:
+        for ax in sim_p.axes:
+            angl_deg = str(int(m.degrees(angl)))
+            # ipdb.set_trace()
+            if ax == 'x' and angl == 0: 
+                last_slice_name = os.path.join(args.img_folder, str(number), str(number)+ '_' + angl_deg +'_6.tif')
+            else:
+                last_slice_name = os.path.join(args.img_folder, str(number), str(number)+ '_'+ ax + angl_deg +'_6.tif')
+
+            if not args.overwrite and os.path.exists(last_slice_name):
+                print('Image already exist: %s' % last_slice_name)
+                continue  
+            if angl == 0:
+                particlesArray_orig = particlesArray_orig.copy()
+                if ax == 'x':
+                    ax = ''
+                else:
+                    continue
+            else:
+                if ax == 'z' and angl == m.pi: 
+                    continue
+                particlesArray_orig = rotate(particlesArray_orig, angl, axis=ax )
+            
+            
+            # Shift the particle to have only positive z values
+            particlesArray_orig[:, 2] = particlesArray_orig[:, 2] - np.min(particlesArray_orig[:, 2]) + 0.01
+
+        
+            # Image generation
+            image = np.zeros((sim_p.size_t, sim_p.size_z, sim_p.size_x, sim_p.size_x))
+            d_save = []
+            t = 0
+
+            for z, z_tr in enumerate(sim_p.z_transes):
+
+                print(z, ":",  z_tr)
+                particlesArray = particlesArray_orig.copy()
+                # particlesArray[:, 2] = particlesArray[:,2]  #+ z_tr
+                # Get particles data 
+                particlesData = process_matrix_all_z(particlesArray, 
+                sim_p.size_x, sim_p.step_size_xy, psf_size_x, stage_delta + z_tr, 
+                sampling, mp, args, wvl=sim_p.wvl,)
+
+                # for t in range(size_t):   
+                b = brightness[:, t]
+                image[t, z, :, :] = np.reshape(
+                    np.sum(particlesData * b[:, None], axis=0), (sim_p.size_x, sim_p.size_x))
+                d=image[t, z, :, :]
+                d/=np.max(d)
+                d*=255
+                d=d.astype(np.uint16)    
+
+                folder_name = os.path.join(args.img_folder, str(number))
+                if not os.path.exists(folder_name):
+                    os.mkdir(folder_name)
+                save_fname = os.path.join(args.img_folder, str(number), str(number)+ '_'+ ax + angl_deg +'_'+str(z)+'.tif')  
+                save_noise_fname = os.path.join(args.img_folder, str(number), 'N_'+str(number) +'_'+ ax+ angl_deg +'_'+str(z)+'.tif')           
+
+                # ipdb.set_trace()
+                imwrite(save_fname, d, compress=6) #dtype=np.uint16)#
+
+        
+            print('Wrote ', save_fname, angl_deg, ax)
+    # ipdb.set_trace()
+        
+
+parser = argparse.ArgumentParser('Sample a watertight mesh.')
+parser.add_argument('in_folder', type=str,
+                    help='Path to input watertight meshes.')
+parser.add_argument('--n_proc', type=int, default=0,
+                    help='Number of processes to use.')
+parser.add_argument('--resolution', type=int, default=24,
+                    help='Resolution of EM segmaentation.')
+parser.add_argument('--write_gt', type=bool, default=False,
+                    help='Whether to wirite GT.')
+parser.add_argument('--microscope_type', type =str, default='epi', 
+                    help='Type of micrsocope being simulated')
+parser.add_argument('--mic_conf', type =str, default='epi2', 
+                    help='Parameters of micrsocope being simulated')
+parser.add_argument('--img_folder', type=str,
+                    help='Output path for simulated images.')
+parser.add_argument('--nimg_folder', type=str, default=None,
+                    help='Output path for simulated gt.')
+parser.add_argument('--overwrite', action='store_true',
+                    help='Whether to overwrite output.')
+
+
+
+def main(args):
+    input_files = glob(os.path.join(args.in_folder, '*.npz'))
+    n_images = len(input_files)
+    print('Number of files', n_images)
+
+
+    if args.n_proc != 0:
+        with Pool(args.n_proc) as p:
+            p.map(partial(generate_mitochondria, args=args), input_files)
+    else:
+        count = 0
+        for p in input_files[::]:
+            generate_mitochondria(p, args)
+            if count == 20:
+                break
+    print('Too big list', too_big_list)
+if __name__ == '__main__':
+    args = parser.parse_args()
+    if args.microscope_type =='confocal':
+    # from simulation import microscPSFmod_conf as msPSF
+        msPSF = map(__import__, "simulation.microscPSFmod_conf.")
+    else:
+    # from simulation import microscPSFmod_epi as msPSF
+        msPSF = map(__import__, 'simulation.microscPSFmod_epi')
+    main(args)
+

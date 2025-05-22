@@ -1,0 +1,36 @@
+method: onet
+data:
+  path: /data_mnt/data/EMPIAR-10791/data/no_hole.install
+  img_folder: epi_img_109       # Set the foler name of the images here
+  img_ext: tif
+  n_views : 6
+  img_size: 128 
+  points_subsample: 2048 
+model:
+  encoder_latent: null
+  decoder: cbatchnorm
+  encoder: resnet18
+  encoder_kwargs: 
+    normalize: True
+  c_dim: 256
+  z_dim: 0
+training:
+  out_dir:  /data_mnt/data/occupancy_networks/out/EMPIAR_10791/img/2d_to_3d_rg_epi
+  batch_size: 64
+  model_selection_metric: iou
+  model_selection_mode: maximize
+  visualize_every: 0
+  validate_every: 20000
+test:
+  threshold: 0.2
+  eval_mesh: true
+  eval_pointcloud: false
+generation:
+  generation_dir: generation
+  batch_size: 100000
+  refine: false
+  n_x: 128
+  n_z: 1
+  resolution_0: 32 
+  upsampling_steps: 2
+
