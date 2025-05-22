@@ -15,12 +15,16 @@ python src/data_unpack.py
 ```
 This will unpack individual instances in the 'data' folder. This step will take a while to complete. If you would liek to get a sneak-peak of the data, we suggest you keep only 1 zip file of the 10 in the full dataset, in the 'data_zip' folder. 
 
+### Data creation from EM segmentation
+Follow the instructions to generate the different forms of instances available in 3DOSL. 
+
 ## Reading and Visualization
 Use the jupyter notbook 'data_read_vis.ipynb' to read and vizualize the different data formats. 
 
 
-## Citing the paper
-You can cite the paper as : 
+
+## Citation
+You can cite the dataset as : 
 ```
 @data{JX6JXF_2024,
 author = {Punnakkal, Abhinanda Ranjit and Jadhav, Suyog S and Celeste, Aaron Vaughn and Horsch, Alexander and Agarwal, Krishna and Prasad, Dilip K},
