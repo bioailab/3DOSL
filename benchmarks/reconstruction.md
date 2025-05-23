@@ -26,7 +26,7 @@ The 3D voxel data is saved into `roi_resized` folder.
 Also save the mid slice of these voxel data to the folder `mid_slice`. 
 
 2. Train the model
-...
+Please follow the instructions in DISPR/README.md for training and generation.
 
 # 3. Fiji Pipeline
 
