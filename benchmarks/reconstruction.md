@@ -26,7 +26,12 @@ The 3D voxel data is saved into `roi_resized` folder.
 Also save the mid slice of these voxel data to the folder `mid_slice`. 
 
 2. Train the model
-Please follow the instructions in DISPR/README.md for training and generation.
+Please follow the instructions in the README.md for training and generation at the (commit)[https://github.com/marrlab/DISPR/tree/dfaec2e7621cb1c1030b1690beebc2ebd6dc8e2f]. Only the batch size parameter for trianing was changed from the default value of 4 to 1. The trinaing flags used is :
+```
+MODEL_FLAGS="--image_size 64 --num_channels 32 --class_cond False --num_res_blocks 1 --num_heads 1 --learn_sigma True --use_scale_shift_norm False --attention_resolutions 16"
+DIFFUSION_FLAGS="--diffusion_steps 1000 --noise_schedule linear --rescale_learned_sigmas False --rescale_timesteps False"
+TRAIN_FLAGS="--lr 1e-4 --batch_size 4"
+```
 
 # 3. Fiji Pipeline
 
